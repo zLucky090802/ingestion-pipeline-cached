@@ -1,0 +1,262 @@
+# Entity
+##  EntityExtractor [#](https://developers.llamaindex.ai/python/framework-api-reference/extractors/entity/#llama_index.extractors.entity.EntityExtractor "Permanent link")
+Bases: 
+Entity extractor. Extracts `entities` into a metadata field using a default model `tomaarsen/span-marker-mbert-base-multinerd` and the SpanMarker library.
+Install SpanMarker with `pip install span-marker`.
+Source code in `llama-index-integrations/extractors/llama-index-extractors-entity/llama_index/extractors/entity/base.py`  
+| 
+```
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+```
+ | 
+```
+classEntityExtractor(BaseExtractor):
+"""
+    Entity extractor. Extracts `entities` into a metadata field using a default model
+    `tomaarsen/span-marker-mbert-base-multinerd` and the SpanMarker library.
+
+    Install SpanMarker with `pip install span-marker`.
+    """
+
+    model_name: str = Field(
+        default=DEFAULT_ENTITY_MODEL,
+        description="The model name of the SpanMarker model to use.",
+    )
+    prediction_threshold: float = Field(
+        default=0.5,
+        description="The confidence threshold for accepting predictions.",
+        ge=0.0,
+        le=1.0,
+    )
+    span_joiner: str = Field(
+        default=" ", description="The separator between entity names."
+    )
+    label_entities: bool = Field(
+        default=False, description="Include entity class labels or not."
+    )
+    device: Optional[str] = Field(
+        default=None, description="Device to run model on, i.e. 'cuda', 'cpu'"
+    )
+    entity_map: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping of entity class names to usable names.",
+    )
+
+    _tokenizer: Callable = PrivateAttr()
+    _model: Any = PrivateAttr()
+
+    def__init__(
+        self,
+        model_name: str = DEFAULT_ENTITY_MODEL,
+        prediction_threshold: float = 0.5,
+        span_joiner: str = " ",
+        label_entities: bool = False,
+        device: Optional[str] = None,
+        entity_map: Optional[Dict[str, str]] = None,
+        tokenizer: Optional[Callable[[str], List[str]]] = None,
+        **kwargs: Any,
+    ):
+"""
+        Entity extractor for extracting entities from text and inserting
+        into node metadata.
+
+        Args:
+            model_name (str):
+                Name of the SpanMarker model to use.
+            prediction_threshold (float):
+                Minimum prediction threshold for entities. Defaults to 0.5.
+            span_joiner (str):
+                String to join spans with. Defaults to " ".
+            label_entities (bool):
+                Whether to label entities with their type. Setting to true can be
+                slightly error prone, but can be useful for downstream tasks.
+                Defaults to False.
+            device (Optional[str]):
+                Device to use for SpanMarker model, i.e. "cpu" or "cuda".
+                Loads onto "cpu" by default.
+            entity_map (Optional[Dict[str, str]]):
+                Mapping from entity class name to label.
+            tokenizer (Optional[Callable[[str], List[str]]]):
+                Tokenizer to use for splitting text into words.
+                Defaults to NLTK word_tokenize.
+
+        """
+        base_entity_map = DEFAULT_ENTITY_MAP
+        if entity_map is not None:
+            base_entity_map.update(entity_map)
+
+        super().__init__(
+            model_name=model_name,
+            prediction_threshold=prediction_threshold,
+            span_joiner=span_joiner,
+            label_entities=label_entities,
+            device=device,
+            entity_map=base_entity_map,
+            **kwargs,
+        )
+
+        self._model = SpanMarkerModel.from_pretrained(model_name)
+        if device is not None:
+            self._model = self._model.to(device)
+
+        self._tokenizer = tokenizer or word_tokenize
+
+    @classmethod
+    defclass_name(cls) -> str:
+        return "EntityExtractor"
+
+    async defaextract(self, nodes: Sequence[BaseNode]) -> List[Dict]:
+        # Extract node-level entity metadata
+        metadata_list: List[Dict] = [{} for _ in nodes]
+        metadata_queue: Iterable[int] = get_tqdm_iterable(
+            range(len(nodes)), self.show_progress, "Extracting entities"
+        )
+
+        for i in metadata_queue:
+            metadata = metadata_list[i]
+            node_text = nodes[i].get_content(metadata_mode=self.metadata_mode)
+            words = self._tokenizer(node_text)
+            spans = self._model.predict(words)
+            for span in spans:
+                if span["score"]  self.prediction_threshold:
+                    ent_label = self.entity_map.get(span["label"], span["label"])
+                    metadata_label = ent_label if self.label_entities else "entities"
+
+                    if metadata_label not in metadata:
+                        metadata[metadata_label] = set()
+
+                    metadata[metadata_label].add(self.span_joiner.join(span["span"]))
+
+        # convert metadata from set to list
+        for metadata in metadata_list:
+            for key, val in metadata.items():
+                metadata[key] = list(val)
+
+        return metadata_list
+
+```
+ |  
+| --- | --- |  
+options: members: - EntityExtractor

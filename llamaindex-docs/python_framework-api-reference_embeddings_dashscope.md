@@ -1,0 +1,2 @@
+# Dashscope
+options: members: - DashScopeEmbedding

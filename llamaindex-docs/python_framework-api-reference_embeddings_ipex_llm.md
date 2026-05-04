@@ -1,0 +1,262 @@
+# Ipex llm
+##  IpexLLMEmbedding [#](https://developers.llamaindex.ai/python/framework-api-reference/embeddings/ipex_llm/#llama_index.embeddings.ipex_llm.IpexLLMEmbedding "Permanent link")
+Bases: 
+Source code in `llama-index-integrations/embeddings/llama-index-embeddings-ipex-llm/llama_index/embeddings/ipex_llm/base.py`  
+| 
+```
+ 28
+ 29
+ 30
+ 31
+ 32
+ 33
+ 34
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+```
+ | 
+```
+classIpexLLMEmbedding(BaseEmbedding):
+    max_length: int = Field(
+        default=DEFAULT_HUGGINGFACE_LENGTH, description="Maximum length of input.", gt=0
+    )
+    normalize: bool = Field(default=True, description="Normalize embeddings or not.")
+    query_instruction: Optional[str] = Field(
+        description="Instruction to prepend to query text."
+    )
+    text_instruction: Optional[str] = Field(
+        description="Instruction to prepend to text."
+    )
+    cache_folder: Optional[str] = Field(
+        description="Cache folder for Hugging Face files."
+    )
+
+    _model: Any = PrivateAttr()
+    _device: str = PrivateAttr()
+
+    def__init__(
+        self,
+        model_name: str = DEFAULT_HUGGINGFACE_EMBEDDING_MODEL,
+        max_length: Optional[int] = None,
+        query_instruction: Optional[str] = None,
+        text_instruction: Optional[str] = None,
+        normalize: bool = True,
+        embed_batch_size: int = DEFAULT_EMBED_BATCH_SIZE,
+        cache_folder: Optional[str] = None,
+        trust_remote_code: bool = False,
+        device: str = "cpu",
+        callback_manager: Optional[CallbackManager] = None,
+        **model_kwargs,
+    ):
+        if device not in ["cpu", "xpu"] and not device.startswith("xpu:"):
+            raise ValueError(
+                "IpexLLMEmbedding currently only supports device to be 'cpu', 'xpu', "
+                f"or 'xpu:<device_id>', but you have: {device}."
+            )
+        device = device
+
+        cache_folder = cache_folder or get_cache_dir()
+
+        if model_name is None:
+            raise ValueError("The `model_name` argument must be provided.")
+        if not is_listed_model(model_name, BGE_MODELS):
+            bge_model_list_str = ", ".join(BGE_MODELS)
+            logger.warning(
+                "IpexLLMEmbedding currently only provides optimization for "
+                f"Hugging Face BGE models, which are: {bge_model_list_str}"
+            )
+
+        model = SentenceTransformer(
+            model_name,
+            device=device,
+            cache_folder=cache_folder,
+            trust_remote_code=trust_remote_code,
+            prompts={
+                "query": query_instruction
+                or get_query_instruct_for_model_name(model_name),
+                "text": text_instruction
+                or get_text_instruct_for_model_name(model_name),
+            },
+            **model_kwargs,
+        )
+
+        # Apply ipex-llm optimizations
+        model = _optimize_pre(self._model)
+        model = _optimize_post(self._model)
+        if device == "xpu":
+            # TODO: apply `ipex_llm.optimize_model`
+            model = model.half().to(device)
+
+        if max_length:
+            model.max_seq_length = max_length
+        else:
+            max_length = model.max_seq_length
+
+        super().__init__(
+            embed_batch_size=embed_batch_size,
+            callback_manager=callback_manager,
+            model_name=model_name,
+            max_length=max_length,
+            normalize=normalize,
+            query_instruction=query_instruction,
+            text_instruction=text_instruction,
+        )
+        self._model = model
+        self._device = device
+
+    @classmethod
+    defclass_name(cls) -> str:
+        return "IpexLLMEmbedding"
+
+    def_embed(
+        self,
+        sentences: List[str],
+        prompt_name: Optional[str] = None,
+    ) -> List[List[float]]:
+"""Embed sentences."""
+        return self._model.encode(
+            sentences,
+            batch_size=self.embed_batch_size,
+            prompt_name=prompt_name,
+            normalize_embeddings=self.normalize,
+        ).tolist()
+
+    def_get_query_embedding(self, query: str) -> List[float]:
+"""Get query embedding."""
+        return self._embed(query, prompt_name="query")
+
+    async def_aget_query_embedding(self, query: str) -> List[float]:
+"""Get query embedding async."""
+        return self._get_query_embedding(query)
+
+    async def_aget_text_embedding(self, text: str) -> List[float]:
+"""Get text embedding async."""
+        return self._get_text_embedding(text)
+
+    def_get_text_embedding(self, text: str) -> List[float]:
+"""Get text embedding."""
+        return self._embed(text, prompt_name="text")
+
+    def_get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
+"""Get text embeddings."""
+        return self._embed(texts, prompt_name="text")
+
+```
+ |  
+| --- | --- |  
+options: members: - IpexLLMEmbedding

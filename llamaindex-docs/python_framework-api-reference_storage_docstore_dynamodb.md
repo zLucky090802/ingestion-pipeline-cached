@@ -1,0 +1,2 @@
+# Dynamodb
+options: members: - DynamoDBDocumentStore

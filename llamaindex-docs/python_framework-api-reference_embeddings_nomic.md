@@ -1,0 +1,251 @@
+# Nomic
+##  NomicEmbedding [#](https://developers.llamaindex.ai/python/framework-api-reference/embeddings/nomic/#llama_index.embeddings.nomic.NomicEmbedding "Permanent link")
+Bases: 
+NomicEmbedding uses the Nomic API to generate embeddings.
+Source code in `llama-index-integrations/embeddings/llama-index-embeddings-nomic/llama_index/embeddings/nomic/base.py`  
+| 
+```
+ 35
+ 36
+ 37
+ 38
+ 39
+ 40
+ 41
+ 42
+ 43
+ 44
+ 45
+ 46
+ 47
+ 48
+ 49
+ 50
+ 51
+ 52
+ 53
+ 54
+ 55
+ 56
+ 57
+ 58
+ 59
+ 60
+ 61
+ 62
+ 63
+ 64
+ 65
+ 66
+ 67
+ 68
+ 69
+ 70
+ 71
+ 72
+ 73
+ 74
+ 75
+ 76
+ 77
+ 78
+ 79
+ 80
+ 81
+ 82
+ 83
+ 84
+ 85
+ 86
+ 87
+ 88
+ 89
+ 90
+ 91
+ 92
+ 93
+ 94
+ 95
+ 96
+ 97
+ 98
+ 99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+```
+ | 
+```
+classNomicEmbedding(MultiModalEmbedding):
+"""NomicEmbedding uses the Nomic API to generate embeddings."""
+
+    query_task_type: Optional[NomicTaskType] = Field(
+        description="Task type for queries",
+    )
+    document_task_type: Optional[NomicTaskType] = Field(
+        description="Task type for documents",
+    )
+    dimensionality: Optional[int] = Field(
+        description="Embedding dimension, for use with Matryoshka-capable models",
+    )
+    model_name: str = Field(description="Embedding model name")
+    vision_model_name: Optional[str] = Field(
+        description="Vision model name for multimodal embeddings",
+    )
+    inference_mode: NomicInferenceMode = Field(
+        description="Whether to generate embeddings locally",
+    )
+    device: Optional[str] = Field(description="Device to use for local embeddings")
+
+    def__init__(
+        self,
+        model_name: str = "nomic-embed-text-v1",
+        vision_model_name: Optional[str] = "nomic-embed-vision-v1",
+        embed_batch_size: int = 32,
+        api_key: Optional[str] = None,
+        callback_manager: Optional[CallbackManager] = None,
+        query_task_type: Optional[str] = "search_query",
+        document_task_type: Optional[str] = "search_document",
+        dimensionality: Optional[int] = 768,
+        inference_mode: str = "remote",
+        device: Optional[str] = None,
+    ):
+        if api_key is not None:
+            nomic.login(api_key)
+
+        super().__init__(
+            model_name=model_name,
+            vision_model_name=vision_model_name,
+            embed_batch_size=embed_batch_size,
+            callback_manager=callback_manager,
+            query_task_type=query_task_type,
+            document_task_type=document_task_type,
+            dimensionality=dimensionality,
+            inference_mode=inference_mode,
+            device=device,
+        )
+
+    @classmethod
+    defclass_name(cls) -> str:
+        return "NomicEmbedding"
+
+    defload_images(self, image_paths: List[ImageType]) -> List[Image.Image]:
+"""Load images from the specified paths."""
+        return [Image.open(image_path).convert("RGB") for image_path in image_paths]
+
+    def_embed_text(
+        self, texts: List[str], task_type: Optional[str] = None
+    ) -> List[List[float]]:
+        result = nomic.embed.text(
+            texts,
+            model=self.model_name,
+            task_type=task_type,
+            dimensionality=self.dimensionality,
+            inference_mode=self.inference_mode,
+            device=self.device,
+        )
+        return result["embeddings"]
+
+    def_embed_image(self, images_paths: List[ImageType]) -> List[List[float]]:
+        images = self.load_images(images_paths)
+        result = nomic.embed.image(images, model=self.vision_model_name)
+        return result["embeddings"]
+
+    def_get_query_embedding(self, query: str) -> List[float]:
+        return self._embed_text([query], task_type=self.query_task_type)[0]
+
+    async def_aget_query_embedding(self, query: str) -> List[float]:
+        self._warn_async()
+        return self._get_query_embedding(query)
+
+    def_get_text_embedding(self, text: str) -> List[float]:
+        return self._embed_text([text], task_type=self.document_task_type)[0]
+
+    async def_aget_text_embedding(self, text: str) -> List[float]:
+        self._warn_async()
+        return self._get_text_embedding(text)
+
+    def_get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
+        return self._embed_text(texts, task_type=self.document_task_type)
+
+    def_get_image_embedding(self, image: ImageType) -> List[float]:
+        return self._embed_image([image])[0]
+
+    async def_aget_image_embedding(self, image: ImageType) -> List[float]:
+        self._warn_async()
+        return self._get_image_embedding(image)
+
+    def_get_image_embeddings(self, images: List[ImageType]) -> List[List[float]]:
+        return self._embed_image(images)
+
+    def_warn_async(self) -> None:
+        warnings.warn(
+            f"{self.class_name()} does not implement async embeddings, falling back to sync method.",
+        )
+
+```
+ |  
+| --- | --- |  
+###  load_images [#](https://developers.llamaindex.ai/python/framework-api-reference/embeddings/nomic/#llama_index.embeddings.nomic.NomicEmbedding.load_images "Permanent link")
+
+```
+load_images(image_paths: [ImageType]) -> [Image]
+
+```
+
+Load images from the specified paths.
+Source code in `llama-index-integrations/embeddings/llama-index-embeddings-nomic/llama_index/embeddings/nomic/base.py`  
+| 
+```
+88
+89
+90
+```
+ | 
+```
+defload_images(self, image_paths: List[ImageType]) -> List[Image.Image]:
+"""Load images from the specified paths."""
+    return [Image.open(image_path).convert("RGB") for image_path in image_paths]
+
+```
+ |  
+| --- | --- |  
+options: members: - NomicEmbedding

@@ -1,0 +1,2 @@
+# Documentcontext
+options: members: - DocumentContextExtractor

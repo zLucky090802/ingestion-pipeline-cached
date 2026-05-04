@@ -1,0 +1,1065 @@
+# Deeplake
+##  DeepLakeVectorStore [#](https://developers.llamaindex.ai/python/framework-api-reference/storage/vector_store/deeplake/#llama_index.vector_stores.deeplake.DeepLakeVectorStore "Permanent link")
+Bases: 
+The DeepLake Vector Store.
+In this vector store we store the text, its embedding and a few pieces of its metadata in a deeplake dataset. This implementation allows the use of an already existing deeplake dataset if it is one that was created this vector store. It also supports creating a new one if the dataset doesn't exist or if `overwrite` is set to True.
+Examples:
+`pip install llama-index-vector-stores-deeplake`
+
+```
+fromllama_index.vector_stores.deeplakeimport DeepLakeVectorStore
+
+# Create an instance of DeepLakeVectorStore
+vector_store = DeepLakeVectorStore(dataset_path=dataset_path, overwrite=True)
+
+```
+
+Source code in `llama-index-integrations/vector_stores/llama-index-vector-stores-deeplake/llama_index/vector_stores/deeplake/base.py`  
+| 
+```
+323
+324
+325
+326
+327
+328
+329
+330
+331
+332
+333
+334
+335
+336
+337
+338
+339
+340
+341
+342
+343
+344
+345
+346
+347
+348
+349
+350
+351
+352
+353
+354
+355
+356
+357
+358
+359
+360
+361
+362
+363
+364
+365
+366
+367
+368
+369
+370
+371
+372
+373
+374
+375
+376
+377
+378
+379
+380
+381
+382
+383
+384
+385
+386
+387
+388
+389
+390
+391
+392
+393
+394
+395
+396
+397
+398
+399
+400
+401
+402
+403
+404
+405
+406
+407
+408
+409
+410
+411
+412
+413
+414
+415
+416
+417
+418
+419
+420
+421
+422
+423
+424
+425
+426
+427
+428
+429
+430
+431
+432
+433
+434
+435
+436
+437
+438
+439
+440
+441
+442
+443
+444
+445
+446
+447
+448
+449
+450
+451
+452
+453
+454
+455
+456
+457
+458
+459
+460
+461
+462
+463
+464
+465
+466
+467
+468
+469
+470
+471
+472
+473
+474
+475
+476
+477
+478
+479
+480
+481
+482
+483
+484
+485
+486
+487
+488
+489
+490
+491
+492
+493
+494
+495
+496
+497
+498
+499
+500
+501
+502
+503
+504
+505
+506
+507
+508
+509
+510
+511
+512
+513
+514
+515
+516
+517
+518
+519
+520
+521
+522
+523
+524
+525
+526
+527
+528
+529
+530
+531
+532
+533
+534
+535
+536
+537
+538
+539
+540
+541
+542
+543
+544
+545
+546
+547
+548
+549
+550
+551
+552
+553
+554
+555
+556
+557
+558
+559
+560
+561
+562
+563
+564
+565
+566
+567
+568
+569
+570
+571
+572
+573
+574
+575
+576
+577
+578
+579
+580
+581
+582
+583
+584
+585
+586
+587
+588
+589
+590
+591
+592
+593
+594
+595
+596
+597
+598
+599
+600
+601
+602
+603
+604
+605
+606
+607
+608
+609
+610
+611
+612
+613
+614
+615
+616
+617
+```
+ | 
+```
+classDeepLakeVectorStore(BasePydanticVectorStore):
+"""
+    The DeepLake Vector Store.
+
+    In this vector store we store the text, its embedding and
+    a few pieces of its metadata in a deeplake dataset. This implementation
+    allows the use of an already existing deeplake dataset if it is one that was created
+    this vector store. It also supports creating a new one if the dataset doesn't
+    exist or if `overwrite` is set to True.
+
+    Examples:
+        `pip install llama-index-vector-stores-deeplake`
+
+        ```python
+        from llama_index.vector_stores.deeplake import DeepLakeVectorStore
+
+        # Create an instance of DeepLakeVectorStore
+        vector_store = DeepLakeVectorStore(dataset_path=dataset_path, overwrite=True)
+        ```
+
+    """
+
+    stores_text: bool = True
+    flat_metadata: bool = True
+
+    ingestion_batch_size: int
+    num_workers: int
+    token: Optional[str]
+    read_only: Optional[bool]
+    dataset_path: str
+    vectorstore: Any = "VectorStore"
+
+    _embedding_dimension: int = PrivateAttr()
+    _ttl_seconds: Optional[int] = PrivateAttr()
+    _deeplake_db: Any = PrivateAttr()
+    _deeplake_db_collection: Any = PrivateAttr()
+    _id_tensor_name: str = PrivateAttr()
+
+    def__init__(
+        self,
+        dataset_path: str = "llama_index",
+        token: Optional[str] = None,
+        read_only: Optional[bool] = False,
+        ingestion_batch_size: int = 1024,
+        ingestion_num_workers: int = 4,
+        overwrite: bool = False,
+        exec_option: Optional[str] = None,
+        verbose: bool = True,
+        **kwargs: Any,
+    ) -> None:
+"""
+        Args:
+            dataset_path (str): The full path for storing to the Deep Lake Vector Store. It can be:
+                - a Deep Lake cloud path of the form ``hub://org_id/dataset_name``. Requires registration with Deep Lake.
+                - an s3 path of the form ``s3://bucketname/path/to/dataset``. Credentials are required in either the environment or passed to the creds argument.
+                - a local file system path of the form ``./path/to/dataset`` or ``~/path/to/dataset`` or ``path/to/dataset``.
+                - a memory path of the form ``mem://path/to/dataset`` which doesn't save the dataset but keeps it in memory instead. Should be used only for testing as it does not persist.
+                Defaults to "llama_index".
+            overwrite (bool, optional): If set to True this overwrites the Vector Store if it already exists. Defaults to False.
+            token (str, optional): Activeloop token, used for fetching user credentials. This is Optional, tokens are normally autogenerated. Defaults to None.
+            read_only (bool, optional): Opens dataset in read-only mode if True. Defaults to False.
+            ingestion_batch_size (int): During data ingestion, data is divided
+                into batches. Batch size is the size of each batch. Defaults to 1024.
+            ingestion_num_workers (int): number of workers to use during data ingestion.
+                Defaults to 4.
+            exec_option (str): Default method for search execution. It could be either ``"auto"``, ``"python"``, ``"compute_engine"`` or ``"tensor_db"``. Defaults to ``"auto"``. If None, it's set to "auto".
+                - ``auto``- Selects the best execution method based on the storage location of the Vector Store. It is the default option.
+                - ``python`` - Pure-python implementation that runs on the client and can be used for data stored anywhere. WARNING: using this option with big datasets is discouraged because it can lead to memory issues.
+                - ``compute_engine`` - Performant C++ implementation of the Deep Lake Compute Engine that runs on the client and can be used for any data stored in or connected to Deep Lake. It cannot be used with in-memory or local datasets.
+                - ``tensor_db`` - Performant and fully-hosted Managed Tensor Database that is responsible for storage and query execution. Only available for data stored in the Deep Lake Managed Database. Store datasets in this database by specifying runtime = {"tensor_db": True} during dataset creation.
+
+        Raises:
+            ImportError: Unable to import `deeplake`.
+
+        """
+        super().__init__(
+            dataset_path=dataset_path,
+            token=token,
+            read_only=read_only,
+            ingestion_batch_size=ingestion_batch_size,
+            num_workers=ingestion_num_workers,
+        )
+
+        self.vectorstore = VectorStore(
+            path=dataset_path,
+            ingestion_batch_size=ingestion_batch_size,
+            num_workers=ingestion_num_workers,
+            token=token,
+            read_only=read_only,
+            exec_option=exec_option,
+            overwrite=overwrite,
+            verbose=verbose,
+            **kwargs,
+        )
+        try:
+            self._id_tensor_name = (
+                "ids" if "ids" in self.vectorstore.tensors() else "id"
+            )
+        except AttributeError:
+            self._id_tensor_name = "id"
+
+    @property
+    defclient(self) -> Any:
+"""
+        Get client.
+
+        Returns:
+            Any: DeepLake vectorstore dataset.
+
+        """
+        return self.vectorstore.dataset
+
+    defsummary(self):
+        self.vectorstore.summary()
+
+    defget_nodes(
+        self,
+        node_ids: Optional[List[str]] = None,
+        filters: Optional[MetadataFilters] = None,
+    ) -> List[BaseNode]:
+"""Get nodes from vector store."""
+        if node_ids:
+            data = self.vectorstore.search(filter={"id": node_ids})
+        else:
+            data = self.vectorstore.search(filter={})
+
+        nodes = []
+        for metadata in data["metadata"]:
+            nodes.append(metadata_dict_to_node(metadata))
+
+        deffilter_func(doc):
+            if not filters:
+                return True
+
+            found_one = False
+            for f in filters.filters:
+                value = doc.metadata[f.key]
+                if f.operator == FilterOperator.EQ:
+                    result = value == f.value
+                elif f.operator == FilterOperator.GT:
+                    result = value  f.value
+                elif f.operator == FilterOperator.GTE:
+                    result = value >= f.value
+                elif f.operator == FilterOperator.LT:
+                    result = value  f.value
+                elif f.operator == FilterOperator.LTE:
+                    result = value <= f.value
+                elif f.operator == FilterOperator.NE:
+                    result = value != f.value
+                elif f.operator == FilterOperator.IN:
+                    result = value in f.value
+                elif f.operator == FilterOperator.NOT_IN:
+                    result = value not in f.value
+                elif f.operator == FilterOperator.TEXT_MATCH:
+                    result = f.value in value
+                else:
+                    raise ValueError(f"Unsupported filter operator: {f.operator}")
+
+                if result:
+                    found_one = True
+                    if filters.condition == FilterCondition.OR:
+                        return True
+                else:
+                    if filters.condition == FilterCondition.AND:
+                        return False
+
+            return found_one
+
+        if filters:
+            return [x for x in nodes if filter_func(x)]
+        else:
+            return nodes
+
+    defdelete_nodes(
+        self,
+        node_ids: Optional[List[str]] = None,
+        filters: Optional[MetadataFilters] = None,
+        **delete_kwargs: Any,
+    ) -> None:
+        if filters:
+            self.vectorstore.delete(
+                ids=[
+                    x.node_id
+                    for x in self.get_nodes(node_ids=node_ids, filters=filters)
+                ]
+            )
+        else:
+            self.vectorstore.delete(ids=node_ids)
+
+    defclear(self) -> None:
+"""Clear the vector store."""
+        if DEEPLAKE_V4:
+            for i in range(len(self.vectorstore.ds) - 1, -1, -1):
+                self.vectorstore.ds.delete(i)
+        else:
+            self.vectorstore.delete(filter=lambda x: True)
+
+    defadd(self, nodes: List[BaseNode], **add_kwargs: Any) -> List[str]:
+"""
+        Add the embeddings and their nodes into DeepLake.
+
+        Args:
+            nodes (List[BaseNode]): List of nodes with embeddings
+                to insert.
+
+        Returns:
+            List[str]: List of ids inserted.
+
+        """
+        embedding = []
+        metadata = []
+        id_ = []
+        text = []
+
+        for node in nodes:
+            embedding.append(node.get_embedding())
+            metadata.append(
+                node_to_metadata_dict(
+                    node, remove_text=False, flat_metadata=self.flat_metadata
+                )
+            )
+            id_.append(node.node_id)
+            text.append(node.get_content(metadata_mode=MetadataMode.NONE))
+
+        if DEEPLAKE_V4:
+            kwargs = {self._id_tensor_name: id_}
+
+            return self.vectorstore.add(
+                embedding_data=embedding,
+                embedding_tensor="embedding",
+                metadata=metadata,
+                text=text,
+                return_ids=True,
+                **kwargs,
+            )
+        else:
+            kwargs = {
+                "embedding": embedding,
+                "metadata": metadata,
+                self._id_tensor_name: id_,
+                "text": text,
+            }
+            return self.vectorstore.add(
+                return_ids=True,
+                **kwargs,
+            )
+
+    defdelete(self, ref_doc_id: str, **delete_kwargs: Any) -> None:
+"""
+        Delete nodes using with ref_doc_id.
+
+        Args:
+            ref_doc_id (str): The doc_id of the document to delete.
+
+        """
+        self.vectorstore.delete(filter={"metadata": {"doc_id": ref_doc_id}})
+
+    defquery(self, query: VectorStoreQuery, **kwargs: Any) -> VectorStoreQueryResult:
+"""
+        Query index for top k most similar nodes.
+
+        Args:
+            query (VectorStoreQuery): VectorStoreQuery class input, it has
+                the following attributes:
+                1. query_embedding (List[float]): query embedding
+                2. similarity_top_k (int): top k most similar nodes
+            deep_memory (bool): Whether to use deep memory for query execution.
+
+        Returns:
+            VectorStoreQueryResult
+
+        """
+        query_embedding = cast(List[float], query.query_embedding)
+        exec_option = kwargs.get("exec_option")
+        deep_memory = kwargs.get("deep_memory")
+        data = self.vectorstore.search(
+            embedding=query_embedding,
+            exec_option=exec_option,
+            k=query.similarity_top_k,
+            distance_metric="cos",
+            filter=query.filters,
+            return_tensors=None,
+            deep_memory=deep_memory,
+        )
+
+        similarities = data["score"]
+        ids = data[self._id_tensor_name]
+        metadatas = data["metadata"]
+        nodes = []
+        for metadata in metadatas:
+            if "_node_type" not in metadata:
+                metadata["_node_type"] = TextNode.class_name()
+            nodes.append(metadata_dict_to_node(metadata))
+
+        return VectorStoreQueryResult(nodes=nodes, similarities=similarities, ids=ids)
+
+```
+ |  
+| --- | --- |  
+###  client `property` [#](https://developers.llamaindex.ai/python/framework-api-reference/storage/vector_store/deeplake/#llama_index.vector_stores.deeplake.DeepLakeVectorStore.client "Permanent link")
+
+```
+client: 
+
+```
+
+Get client.
+Returns:  
+| Name  | Type  | Description  |  
+| --- | --- | --- |  
+| `Any`  |  DeepLake vectorstore dataset.  |  
+###  get_nodes [#](https://developers.llamaindex.ai/python/framework-api-reference/storage/vector_store/deeplake/#llama_index.vector_stores.deeplake.DeepLakeVectorStore.get_nodes "Permanent link")
+
+```
+get_nodes(
+    node_ids: Optional[[]] = None,
+    filters: Optional[] = None,
+) -> []
+
+```
+
+Get nodes from vector store.
+Source code in `llama-index-integrations/vector_stores/llama-index-vector-stores-deeplake/llama_index/vector_stores/deeplake/base.py`  
+| 
+```
+438
+439
+440
+441
+442
+443
+444
+445
+446
+447
+448
+449
+450
+451
+452
+453
+454
+455
+456
+457
+458
+459
+460
+461
+462
+463
+464
+465
+466
+467
+468
+469
+470
+471
+472
+473
+474
+475
+476
+477
+478
+479
+480
+481
+482
+483
+484
+485
+486
+487
+488
+489
+490
+491
+492
+493
+494
+```
+ | 
+```
+defget_nodes(
+    self,
+    node_ids: Optional[List[str]] = None,
+    filters: Optional[MetadataFilters] = None,
+) -> List[BaseNode]:
+"""Get nodes from vector store."""
+    if node_ids:
+        data = self.vectorstore.search(filter={"id": node_ids})
+    else:
+        data = self.vectorstore.search(filter={})
+
+    nodes = []
+    for metadata in data["metadata"]:
+        nodes.append(metadata_dict_to_node(metadata))
+
+    deffilter_func(doc):
+        if not filters:
+            return True
+
+        found_one = False
+        for f in filters.filters:
+            value = doc.metadata[f.key]
+            if f.operator == FilterOperator.EQ:
+                result = value == f.value
+            elif f.operator == FilterOperator.GT:
+                result = value  f.value
+            elif f.operator == FilterOperator.GTE:
+                result = value >= f.value
+            elif f.operator == FilterOperator.LT:
+                result = value  f.value
+            elif f.operator == FilterOperator.LTE:
+                result = value <= f.value
+            elif f.operator == FilterOperator.NE:
+                result = value != f.value
+            elif f.operator == FilterOperator.IN:
+                result = value in f.value
+            elif f.operator == FilterOperator.NOT_IN:
+                result = value not in f.value
+            elif f.operator == FilterOperator.TEXT_MATCH:
+                result = f.value in value
+            else:
+                raise ValueError(f"Unsupported filter operator: {f.operator}")
+
+            if result:
+                found_one = True
+                if filters.condition == FilterCondition.OR:
+                    return True
+            else:
+                if filters.condition == FilterCondition.AND:
+                    return False
+
+        return found_one
+
+    if filters:
+        return [x for x in nodes if filter_func(x)]
+    else:
+        return nodes
+
+```
+ |  
+| --- | --- |  
+###  clear [#](https://developers.llamaindex.ai/python/framework-api-reference/storage/vector_store/deeplake/#llama_index.vector_stores.deeplake.DeepLakeVectorStore.clear "Permanent link")
+
+```
+clear() -> None
+
+```
+
+Clear the vector store.
+Source code in `llama-index-integrations/vector_stores/llama-index-vector-stores-deeplake/llama_index/vector_stores/deeplake/base.py`  
+| 
+```
+512
+513
+514
+515
+516
+517
+518
+```
+ | 
+```
+defclear(self) -> None:
+"""Clear the vector store."""
+    if DEEPLAKE_V4:
+        for i in range(len(self.vectorstore.ds) - 1, -1, -1):
+            self.vectorstore.ds.delete(i)
+    else:
+        self.vectorstore.delete(filter=lambda x: True)
+
+```
+ |  
+| --- | --- |  
+###  add [#](https://developers.llamaindex.ai/python/framework-api-reference/storage/vector_store/deeplake/#llama_index.vector_stores.deeplake.DeepLakeVectorStore.add "Permanent link")
+
+```
+add(nodes: [], **add_kwargs: ) -> []
+
+```
+
+Add the embeddings and their nodes into DeepLake.
+Parameters:  
+| Name  | Type  | Description  | Default  |  
+| --- | --- | --- | --- |  
+|  `nodes`  |   |  List of nodes with embeddings to insert.  |  _required_  |  
+Returns:  
+| Type  | Description  |  
+| --- | --- |  
+|  `List[str]`  |  List[str]: List of ids inserted.  |  
+Source code in `llama-index-integrations/vector_stores/llama-index-vector-stores-deeplake/llama_index/vector_stores/deeplake/base.py`  
+| 
+```
+520
+521
+522
+523
+524
+525
+526
+527
+528
+529
+530
+531
+532
+533
+534
+535
+536
+537
+538
+539
+540
+541
+542
+543
+544
+545
+546
+547
+548
+549
+550
+551
+552
+553
+554
+555
+556
+557
+558
+559
+560
+561
+562
+563
+564
+565
+566
+567
+568
+```
+ | 
+```
+defadd(self, nodes: List[BaseNode], **add_kwargs: Any) -> List[str]:
+"""
+    Add the embeddings and their nodes into DeepLake.
+
+    Args:
+        nodes (List[BaseNode]): List of nodes with embeddings
+            to insert.
+
+    Returns:
+        List[str]: List of ids inserted.
+
+    """
+    embedding = []
+    metadata = []
+    id_ = []
+    text = []
+
+    for node in nodes:
+        embedding.append(node.get_embedding())
+        metadata.append(
+            node_to_metadata_dict(
+                node, remove_text=False, flat_metadata=self.flat_metadata
+            )
+        )
+        id_.append(node.node_id)
+        text.append(node.get_content(metadata_mode=MetadataMode.NONE))
+
+    if DEEPLAKE_V4:
+        kwargs = {self._id_tensor_name: id_}
+
+        return self.vectorstore.add(
+            embedding_data=embedding,
+            embedding_tensor="embedding",
+            metadata=metadata,
+            text=text,
+            return_ids=True,
+            **kwargs,
+        )
+    else:
+        kwargs = {
+            "embedding": embedding,
+            "metadata": metadata,
+            self._id_tensor_name: id_,
+            "text": text,
+        }
+        return self.vectorstore.add(
+            return_ids=True,
+            **kwargs,
+        )
+
+```
+ |  
+| --- | --- |  
+###  delete [#](https://developers.llamaindex.ai/python/framework-api-reference/storage/vector_store/deeplake/#llama_index.vector_stores.deeplake.DeepLakeVectorStore.delete "Permanent link")
+
+```
+delete(ref_doc_id: , **delete_kwargs: ) -> None
+
+```
+
+Delete nodes using with ref_doc_id.
+Parameters:  
+| Name  | Type  | Description  | Default  |  
+| --- | --- | --- | --- |  
+|  `ref_doc_id`  |  The doc_id of the document to delete.  |  _required_  |  
+Source code in `llama-index-integrations/vector_stores/llama-index-vector-stores-deeplake/llama_index/vector_stores/deeplake/base.py`  
+| 
+```
+570
+571
+572
+573
+574
+575
+576
+577
+578
+```
+ | 
+```
+defdelete(self, ref_doc_id: str, **delete_kwargs: Any) -> None:
+"""
+    Delete nodes using with ref_doc_id.
+
+    Args:
+        ref_doc_id (str): The doc_id of the document to delete.
+
+    """
+    self.vectorstore.delete(filter={"metadata": {"doc_id": ref_doc_id}})
+
+```
+ |  
+| --- | --- |  
+###  query [#](https://developers.llamaindex.ai/python/framework-api-reference/storage/vector_store/deeplake/#llama_index.vector_stores.deeplake.DeepLakeVectorStore.query "Permanent link")
+
+```
+query(
+    query: , **kwargs: 
+) -> 
+
+```
+
+Query index for top k most similar nodes.
+Parameters:  
+| Name  | Type  | Description  | Default  |  
+| --- | --- | --- | --- |  
+|  `query`  |   |  VectorStoreQuery class input, it has the following attributes: 1. query_embedding (List[float]): query embedding 2. similarity_top_k (int): top k most similar nodes  |  _required_  |  
+|  `deep_memory`  |  `bool`  |  Whether to use deep memory for query execution.  |  _required_  |  
+Returns:  
+| Type  | Description  |  
+| --- | --- |  
+|   |  VectorStoreQueryResult  |  
+Source code in `llama-index-integrations/vector_stores/llama-index-vector-stores-deeplake/llama_index/vector_stores/deeplake/base.py`  
+| 
+```
+580
+581
+582
+583
+584
+585
+586
+587
+588
+589
+590
+591
+592
+593
+594
+595
+596
+597
+598
+599
+600
+601
+602
+603
+604
+605
+606
+607
+608
+609
+610
+611
+612
+613
+614
+615
+616
+617
+```
+ | 
+```
+defquery(self, query: VectorStoreQuery, **kwargs: Any) -> VectorStoreQueryResult:
+"""
+    Query index for top k most similar nodes.
+
+    Args:
+        query (VectorStoreQuery): VectorStoreQuery class input, it has
+            the following attributes:
+            1. query_embedding (List[float]): query embedding
+            2. similarity_top_k (int): top k most similar nodes
+        deep_memory (bool): Whether to use deep memory for query execution.
+
+    Returns:
+        VectorStoreQueryResult
+
+    """
+    query_embedding = cast(List[float], query.query_embedding)
+    exec_option = kwargs.get("exec_option")
+    deep_memory = kwargs.get("deep_memory")
+    data = self.vectorstore.search(
+        embedding=query_embedding,
+        exec_option=exec_option,
+        k=query.similarity_top_k,
+        distance_metric="cos",
+        filter=query.filters,
+        return_tensors=None,
+        deep_memory=deep_memory,
+    )
+
+    similarities = data["score"]
+    ids = data[self._id_tensor_name]
+    metadatas = data["metadata"]
+    nodes = []
+    for metadata in metadatas:
+        if "_node_type" not in metadata:
+            metadata["_node_type"] = TextNode.class_name()
+        nodes.append(metadata_dict_to_node(metadata))
+
+    return VectorStoreQueryResult(nodes=nodes, similarities=similarities, ids=ids)
+
+```
+ |  
+| --- | --- |  
+options: members: - DeepLakeVectorStore

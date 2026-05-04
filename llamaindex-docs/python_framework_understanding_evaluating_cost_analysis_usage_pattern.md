@@ -1,0 +1,309 @@
+[Skip to content](https://developers.llamaindex.ai/python/framework/understanding/evaluating/cost_analysis/usage_pattern/#_top)
+LlamaIndex Framework
+Learn
+Evaluating
+Cost Analysis
+Copy Markdown
+Open in **Claude**
+Open in **ChatGPT**
+Open in **Cursor**
+**Copy Markdown**
+**View as Markdown**
+# Usage Pattern
+## Estimating LLM and Embedding Token Counts
+[Section titled “Estimating LLM and Embedding Token Counts”](https://developers.llamaindex.ai/python/framework/understanding/evaluating/cost_analysis/usage_pattern/#estimating-llm-and-embedding-token-counts)
+In order to measure LLM and Embedding token counts, you’ll need to
+  1. Setup `MockLLM` and `MockEmbedding` objects
+
+
+
+```
+
+
+from llama_index.core.llms import MockLLM
+
+
+
+
+from llama_index.core import MockEmbedding
+
+
+
+
+
+llm = MockLLM(max_tokens=256)
+
+
+
+
+embed_model = MockEmbedding(embed_dim=1536)
+
+
+```
+
+  1. Setup the `TokenCountingCallback` handler
+
+
+
+```
+
+
+import tiktoken
+
+
+
+
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+
+
+
+
+
+token_counter = TokenCountingHandler(
+
+
+
+
+tokenizer=tiktoken.encoding_for_model("gpt-3.5-turbo").encode
+
+
+
+
+
+
+callback_manager = CallbackManager([token_counter])
+
+
+```
+
+  1. Add them to the global `Settings`
+
+
+
+```
+
+
+from llama_index.core import Settings
+
+
+
+
+
+Settings.llm = llm
+
+
+
+
+Settings.embed_model = embed_model
+
+
+
+
+Settings.callback_manager = callback_manager
+
+
+```
+
+  1. Construct an Index
+
+
+
+```
+
+
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+
+
+
+
+
+documents = SimpleDirectoryReader(
+
+
+
+
+"./docs/examples/data/paul_graham"
+
+
+
+).load_data()
+
+
+
+
+index = VectorStoreIndex.from_documents(documents)
+
+
+```
+
+  1. Measure the counts!
+
+
+
+```
+
+
+print(
+
+
+
+
+"Embedding Tokens: ",
+
+
+
+
+token_counter.total_embedding_token_count,
+
+
+
+
+"\n",
+
+
+
+
+"LLM Prompt Tokens: ",
+
+
+
+
+token_counter.prompt_llm_token_count,
+
+
+
+
+"\n",
+
+
+
+
+"LLM Completion Tokens: ",
+
+
+
+
+token_counter.completion_llm_token_count,
+
+
+
+
+"\n",
+
+
+
+
+"Total LLM Token Count: ",
+
+
+
+
+token_counter.total_llm_token_count,
+
+
+
+
+"\n",
+
+
+
+
+
+# reset counts
+
+
+token_counter.reset_counts()
+
+```
+
+  1. Run a query, measure again
+
+
+
+```
+
+
+query_engine = index.as_query_engine()
+
+
+
+
+
+response = query_engine.query("query")
+
+
+
+
+
+print(
+
+
+
+
+"Embedding Tokens: ",
+
+
+
+
+token_counter.total_embedding_token_count,
+
+
+
+
+"\n",
+
+
+
+
+"LLM Prompt Tokens: ",
+
+
+
+
+token_counter.prompt_llm_token_count,
+
+
+
+
+"\n",
+
+
+
+
+"LLM Completion Tokens: ",
+
+
+
+
+token_counter.completion_llm_token_count,
+
+
+
+
+"\n",
+
+
+
+
+"Total LLM Token Count: ",
+
+
+
+
+token_counter.total_llm_token_count,
+
+
+
+
+"\n",
+
+
+
+```
+
+  * [ LlamaParse ](https://developers.llamaindex.ai/llamaparse/)
+  * [ LiteParse ](https://developers.llamaindex.ai/liteparse/)
+  * [ LlamaAgents ](https://developers.llamaindex.ai/python/llamaagents/)
+  * [ LlamaIndex Framework ](https://developers.llamaindex.ai/python/framework/)
+
+

@@ -1,0 +1,2 @@
+# Agentops
+options: members: - AgentOpsEventHandler
