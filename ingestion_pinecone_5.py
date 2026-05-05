@@ -28,7 +28,8 @@ from llama_index.core.storage.docstore import SimpleDocumentStore
 
 import chromadb
 from llama_index.vector_stores.chroma import ChromaVectorStore
-
+from llama_index.vector_stores.pinecone import PineconeVectorStore
+from pinecone import Pinecone
 
 load_dotenv()
 api_key = os.getenv('GROQ_API_KEY')
@@ -47,6 +48,9 @@ Settings.chunk_overlap = 50
 CACHE_DIR='./pipeline_cache'
 CHROMA_DIR = './chroma_db_cached'
 
+INDEX_NAME = 'llamaindex-doc-helper'
+EMBEDDING_DIMENSION = 384
+
 def get_transformation():
     return [
         SentenceSplitter(
@@ -63,42 +67,41 @@ def main():
     print('Ingestion pipeline with LlamaIndex Caching')
     print('=' * 60)
     
-    #load documents
-    print('\n[1/6] Loading documents...')
     
+    #connect to pinecone vector store
+    print('Connecting to pinecone vector store...')
+    pc = Pinecone(
+        api_key=os.getenv('PINECONE_API_KEY')
+    )
+    
+    pinecone_index = pc.Index(INDEX_NAME)
+    vector_store = PineconeVectorStore(pinecone_index=pinecone_index)
+    
+    #check current stast
+    
+    stast = pinecone_index.describe_index_stats()
+    
+    print(f'        Connected to index: {INDEX_NAME}')
+    print(f'        Current vector in index: {stast.total_vector_count}')
+    
+    #load all documents from the data directorey
+    print('Loading documents from data directory...')
     documents = SimpleDirectoryReader(
         input_dir= './llamaindex-docs',
         required_exts=['.md'],
-        num_files_limit=10
+       
     ).load_data()
     
-    print(f' Found {len(documents)} documents in source directory.')
+    print(f'    Loaded {len(documents)} documents')
     
-    #created persistent chroma vectore store
-    print('\n [2/6] Setting up ChromaDB vectore store...')
-    chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
-    chroma_collection = chroma_client.get_or_create_collection('llamaindex_docs')
-    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-    print(f' ChromaDB path: {CHROMA_DIR}')
-    print(f' Existing embeddings in ChromaDB: {chroma_collection.count()}')
-    
-    #create pipeline with docstore for deduplication
-    print(f'\n [3/6] Creating iongestion pipeline with caching')
+    print(f'\n Creating iongestion pipeline with caching')
     pipeline = IngestionPipeline(
         transformations=get_transformation(),
         vector_store=vector_store,
         docstore=SimpleDocumentStore()
     )
     
-    #Load existing cache if available
-    if os.path.exists(CACHE_DIR):
-        print(f'    Loading existing cache from {CACHE_DIR}...')
-        pipeline.load(persist_dir=CACHE_DIR)
-        print('     Cache loaded! Unchanged document will be skipped.')
-    else:
-        print('     No existing cache found. Will process all documents.')
-        
-    #run the pipeline - LlamaIndex will use cached tranformations
+    
     print('\n [4/6] Running ingestion pipeline...')
     print('     (Cached tranformation will be reused - no redundant API calls)')
     
@@ -110,36 +113,19 @@ def main():
     #Report results
     print(f'\n      Pipeline completed in {elapsed:.2f} seconds.')
     print(f'        Nodes returned: {len(processed_node)}')
-    print(f'        Total embeddings in ChromaDB: {chroma_collection.count()}')
+
+    #testing and verify query
     
-    #Show metadata from firts processed node (if any)
+    print('\n testing query...')
+    stast = pinecone_index.describe_index_stats()
+    print(f'        Total vectors in pinecone: {stast.total_vector_count}')
     
-    if processed_node:
-        print('\n   Sample metada from first NEW node:')
-        if processed_node[0].embedding:
-            print(f'    -Embeddings dimensions: {len(processed_node[0].embedding)}')
-        first_node_metada = processed_node[0].metadata
-        for key, value in list(first_node_metada.items())[:3]:
-            print(f'    - {key}:{value}')
-            
-    #persist cache for next run
-    print(f'\n [5/6] Persisting cache to {CACHE_DIR}...')
-    pipeline.persist(persist_dir=CACHE_DIR)
-    print('     Chache saved! Next run will skip unchanged documents.')
+    index = VectorStoreIndex.from_vector_store(vector_store=vector_store)
+    query_engine = index.as_query_engine()
     
-    #Create index and query
+    response = query_engine.query('what is llamaindex?')
     
-    print('\n [6/6] Creating vector store index and testing query...')
-    vector_index = VectorStoreIndex.from_vector_store(vector_store)
-    query_engine = vector_index.as_query_engine()
-    
-    print('\n' + '=' * 60)
-    print('Query test')
-    print('=' * 60)
-    query = 'What is LlamaIndex used for?'
-    print(f'Query: {query}')
-    response = query_engine.query(query)
-    print(f'\nResponse: \n{response}')
+    print(f'\n       Query response: {response}')
 
 if __name__ == '__main__':
     main()
