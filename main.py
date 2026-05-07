@@ -17,6 +17,43 @@ from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
 
 
+class DuplicateROmovePostProcessor(BaseNodePostprocessor):
+    
+    def postprocess_nodes(self, nodes: list[NodeWithScore]) -> list[NodeWithScore]:
+        if not nodes:
+            return nodes
+        
+        
+        seen_texts = set()
+        unique_nodes = []
+        
+        for node in nodes:
+            node_text = node.node.get_content()
+            is_duplicate = False
+            similariity_threshold: float = 0.8
+            #Compatre against all previouslt seen texts
+            for seen_text in seen_texts:
+                node_words = set(node_text.lower().split())
+                seen_words = set(seen_text.lower().split())
+                
+                overlap = len(node_words & seen_words)
+                total = len (node_words | seen_words)
+                jacard_similarity = overlap / total if total > 0 else 0
+                
+                if jacard_similarity > similariity_threshold:
+                    is_duplicate = True
+                    break
+            
+            
+            
+            
+            if not is_duplicate:
+              seen_text.add(node_text)
+              unique_nodes.append(node)
+            
+        return unique_nodes
+    
+
 load_dotenv()
 
 # Configuration
@@ -75,6 +112,7 @@ def main():
         st.session_state.chat_engine = index.as_chat_engine(
             memory = memory,
             chat_mode=ChatMode.BEST,
+            post_processors=[DuplicateROmovePostProcessor, sentence_optimizer],
             system_prompt = (
                 "You are a helpful assistant that answers questions about LlamaIndex. "
                 "Use the retrieved context to provide accurate, helpful answers. "
