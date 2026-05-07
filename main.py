@@ -58,6 +58,7 @@ def main():
         
     if 'chat_engine' not in st.session_state:
         index = get_index()
+
         
         #Create sentence Embedding Optimizer post-processor
         sentence_optimizer = SentenceEmbeddingOptimizer(
@@ -69,6 +70,7 @@ def main():
         )
         
         
+
         memory = ChatMemoryBuffer.from_defaults(token_limit=3900)
         st.session_state.chat_engine = index.as_chat_engine(
             memory = memory,
@@ -80,7 +82,7 @@ def main():
             ),
         )
         
-      
+
     #display chat messages from history
     
     for message in st.session_state.messages:
@@ -97,6 +99,7 @@ def main():
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 #update the las messages with the actual response
+
                 
                 response = st.session_state.chat_engine.chat(prompt)
                 nodes = response.source_nodes
@@ -122,6 +125,13 @@ def main():
                                 else f"> {node.text}"
                             )
                             st.divider()
+
+                response = st.session_state.chat_engine.chat(prompt)
+                st.session_state.messages.append(
+                    {'role':'assitant','content':response.response}
+                )
+                st.markdown(response.response)
+
         #add assistant response to chat history
         st.session_state.messages.append({'role':'assistant','content':response.response})
                 
